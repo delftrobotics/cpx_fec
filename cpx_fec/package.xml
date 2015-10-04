@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="2">
+	<name>cpx_fec</name>
+	<version>0.1.0</version>
+	<description>Driver node for the Festo CPX-FEC valve terminal.</description>
+
+	<maintainer email="maarten@de-vri.es">Maarten de Vries</maintainer>
+
+	<license>GPLv3</license>
+
+	<buildtool_depend>catkin</buildtool_depend>
+	<depend>roscpp</depend>
+	<depend>std_msgs</depend>
+	<depend>dr_base</depend>
+	<depend>modbus</depend>
+	<depend>cpx_fec_msgs</depend>
+
+	<export>
+	</export>
+</package>
