@@ -26,7 +26,7 @@ class Node {
 	std::string host;
 	int port = 502;
 	int write_base = 40003;
-	int read_base = 40003;
+	int read_base  = 45395;
 
 public:
 	Node(boost::asio::io_service & ios) :
