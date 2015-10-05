@@ -28,6 +28,9 @@ class Node {
 	int write_base = 40003;
 	int read_base  = 45395;
 
+	std::uint32_t outputs = 0;
+	bool outputs_synchronized = false;
+
 public:
 	Node(boost::asio::io_service & ios) :
 		modbus(ios),
@@ -58,6 +61,7 @@ public:
 		modbus.close();
 		read_timer.cancel();
 		reconnect_timer.cancel();
+		outputs_synchronized = false;
 	}
 
 protected:
@@ -82,6 +86,7 @@ protected:
 	void onConnect(boost::system::error_code const & error) {
 		if (handleError(error, "connecting to modbus server")) return;
 
+		outputs_synchronized = false;
 		ROS_INFO_STREAM("Connected to modbus server at " << host << ":" << port << ".");
 		onReadTimeout({});
 	}
@@ -90,14 +95,18 @@ protected:
 		if (handleError(error, "waiting for read timer")) return;
 
 		auto callback = [this] (modbus::tcp_mbap const &, modbus::response::read_holding_registers const & response, boost::system::error_code const & error) {
-			if (handleError(error, "reading valve state from modbus server")) return;
+			if (handleError(error, "reading output states")) return;
 			if (response.values.size() != 2) {
 				ROS_ERROR_STREAM("Got wrong number of values from modbus server. Got " << response.values.size() << " , expected 2.");
 				return;
 			}
 
+			std::uint32_t read_outputs = response.values[0] | response.values[1] << 16;
+			if (!outputs_synchronized) outputs = read_outputs;
+			outputs_synchronized = true;
+
 			std_msgs::UInt32 message;
-			message.data = response.values[0] | response.values[1] << 16;
+			message.data = read_outputs;
 			output_publisher.publish(message);
 
 			read_timer.expires_from_now(boost::posix_time::milliseconds(50));
@@ -107,45 +116,17 @@ protected:
 		modbus.read_holding_registers(0, read_base, 2, callback);
 	}
 
-	void writeMasked(std::uint16_t address, std::uint16_t value, std::uint16_t mask) {
-		std::uint16_t and_mask =  ~mask;
-		std::uint16_t or_mask  =  value & mask;
-
-		ROS_DEBUG_STREAM(
-			"Setting register " << address << " to 0x"
-			<< std::hex << std::setw(4) << value
-			<< " with mask "
-			<< std::hex << std::setw(4) << mask
-			<< ". Using and_mask 0x"
-			<< std::hex << std::setw(4) << and_mask
-			<< " with or_mask 0x"
-			<< std::hex << std::setw(4) << or_mask
-			<< ".";
-		);
-
-		auto callback = [this, address] (modbus::tcp_mbap const &, modbus::response::mask_write_register const &, boost::system::error_code const & error) {
-			if (handleError(error, "setting register " + std::to_string(address))) return;
+	void setOutputs(unsigned int values, unsigned int mask) {
+		auto callback = [this] (modbus::tcp_mbap const &, modbus::response::write_multiple_registers const &, boost::system::error_code const & error) {
+			if (handleError(error, "setting registers")) return;
 		};
 
-		modbus.mask_write_register(0, address, and_mask, or_mask, callback);
-	}
-
-	void setOutputs(unsigned int values, unsigned int mask) {
-		writeMasked(write_base + 0, values >>  0 & 0xffff, mask >>  0 & 0xffff);
-		writeMasked(write_base + 1, values >> 16 & 0xffff, mask >> 16 & 0xffff);
+		outputs = (outputs & ~mask) | (values & mask);
+		modbus.write_multiple_registers(0, write_base, {std::uint16_t(outputs & 0xffff), std::uint16_t(outputs >> 16 & 0xffff)}, callback);
 	}
 
 	bool onSetOuput(cpx_fec_msgs::SetOutput::Request & request, cpx_fec_msgs::SetOutput::Response &) {
-		if (!modbus.is_connected()) {
-			ROS_ERROR_STREAM("Not connected to modbus server. Can not set output.");
-			return false;
-		}
-
-		modbus.ios().dispatch([this, request]() {
-			int offset   = request.index / 16;
-			int subindex = request.index % 16;
-			writeMasked(write_base + offset, request.value << subindex, 1 << subindex);
-		});
+		setOutputs(request.value << request.index, 1 << request.index);
 		return true;
 	}
 
