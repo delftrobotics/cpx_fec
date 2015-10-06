@@ -37,12 +37,12 @@ The driver is implemented as the `cpx_fec` node in the `cpx_fec` package.
  
 * `~/set_outputs : cpx_fec_msgs/SetOutputs`
 
- Set a multiple outputs.
+ Set multiple outputs.
  Takes a 32 bit unsigned integer value representing the outputs and a 32 bit mask.
  Only bits set in the mask are affected.
  Returns nothing.
  
-### Advertised topic
+### Advertised topics
 
 * `~/outputs : std_msgs/UInt32`
 
