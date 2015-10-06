@@ -126,13 +126,21 @@ protected:
 	}
 
 	bool onSetOuput(cpx_fec_msgs::SetOutput::Request & request, cpx_fec_msgs::SetOutput::Response &) {
-		setOutputs(request.value << request.index, 1 << request.index);
+		if (!modbus.is_connected()) {
+			ROS_ERROR_STREAM("Not connected to modbus server. Can not set outputs.");
+			return false;
+		}
+
+		modbus.ios().dispatch([this, request]() {
+			setOutputs(request.value << request.index, 1 << request.index);
+		});
+
 		return true;
 	}
 
 	bool onSetOuputs(cpx_fec_msgs::SetOutputs::Request & request, cpx_fec_msgs::SetOutputs::Response &) {
 		if (!modbus.is_connected()) {
-			ROS_ERROR_STREAM("Not connected to modbus server. Can not set outputs.");
+			ROS_ERROR_STREAM("Not connected to modbus server. Can not set output.");
 			return false;
 		}
 
